@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+import "nanopb.proto";
+
+message adcResults {    
+    repeated float resp = 1 [(nanopb).max_count = 10, (nanopb).fixed_count = true];
+}
