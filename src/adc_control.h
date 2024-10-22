@@ -56,8 +56,8 @@
     .pin_n          = NRF_SAADC_INPUT_DISABLED,         \
     .channel_index  = _index,                           \
 }
-#define MESSAGE_NUM 10
 
-extern void calibrate_and_start();
+
+extern void calibrate_and_start(struct k_work *work);
 
 #endif

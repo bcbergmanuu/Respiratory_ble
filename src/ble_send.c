@@ -25,7 +25,7 @@
 
 LOG_MODULE_REGISTER(BLE_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
 
-K_QUEUE_DEFINE(resp_data_queue);
+K_FIFO_DEFINE(resp_data_queue);
 
 uint8_t notify_ble_resp_on1 =0;
 
@@ -108,9 +108,13 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 	.le_data_len_updated = le_data_length_updated,
 };
 
+K_WORK_DEFINE(startcollecting, calibrate_and_start);
 
 static void resp_readmotion_data_notify_changed(const struct bt_gatt_attr *attr, uint16_t value) {
 	notify_ble_resp_on1 = (value == BT_GATT_CCC_NOTIFY) ? 1 : 0;
+	if(notify_ble_resp_on1) {
+		k_work_submit(&startcollecting);
+	}	
 }
 
 BT_GATT_SERVICE_DEFINE(motion_svc,
@@ -188,23 +192,25 @@ int ble_load()
 
 
 
-void ble_notify_respiratory_proc(void *, void *, void *) {		
+void ble_notify_respiratory_proc(struct resp_result_s *dataitem) {		
 	struct bt_gatt_attr *notify_attr = bt_gatt_find_by_uuid(motion_svc.attrs, motion_svc.attr_count, &respiratory_notify_prop.uuid);
-    while(1) {
+	
+    
         
-        struct resp_result_s *dataitem = k_queue_get(&resp_data_queue, K_FOREVER);
+        //struct resp_result_s *dataitem = k_fifo_get(&resp_data_queue, K_FOREVER);
 		
-        if(!notify_ble_resp_on1){
+        if(notify_ble_resp_on1){
 
 			size_t packed_size;        
 
 			encode_data(dataitem->resultset, respiratory_notify_buff, &packed_size);
-			bt_gatt_notify(NULL, notify_attr, respiratory_notify_buff, packed_size);
+			LOG_INF("notify:");
+			bt_gatt_notify(NULL, notify_attr, respiratory_notify_buff, packed_size);			
 		}
-		k_free(dataitem);
-    }
+		//k_free(dataitem);
+    
 }
 
 
-K_THREAD_DEFINE(ble_sender, 1024, ble_notify_respiratory_proc,  NULL, NULL, NULL, 7, 0, 0);
+// K_THREAD_DEFINE(ble_sender, 2048, ble_notify_respiratory_proc,  NULL, NULL, NULL, 7, 0, 0);
 SYS_INIT(ble_load, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);

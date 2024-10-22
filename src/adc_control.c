@@ -100,14 +100,35 @@ NRFX_STATIC_ASSERT((INTERNAL_TIMER_CC >= 80UL ) && (INTERNAL_TIMER_CC <= 2047UL)
  *
  * @param[in] p_event Pointer to an SAADC driver event.
  */
+
+static volatile float lastNum = 0;
+
+
+void dataready_handler(struct k_work *work) {
+
+    static uint16_t itemfillcounter = 0;
+    static float avg_result_items[MESSAGE_NUM] = {0};        
+    avg_result_items[itemfillcounter] = lastNum;
+    itemfillcounter++;
+    if(itemfillcounter > MESSAGE_NUM-1) {
+        itemfillcounter = 0;
+        struct resp_result_s str_resp;
+        
+        memcpy(str_resp.resultset, avg_result_items, sizeof(avg_result_items));            
+        ble_notify_respiratory_proc(&str_resp);
+    }
+}
+
+K_WORK_DEFINE(dataready_worker, dataready_handler);
+
+
 static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 {
     nrfx_err_t status;
     (void)status;
 
     static uint16_t buffer_index = 1;
-    static uint16_t itemfillcounter = 0;
-    static float avg_result_items[MESSAGE_NUM] = {0};
+
     
     uint16_t samples_number;
 
@@ -137,24 +158,15 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
             break;
 
         case NRFX_SAADC_EVT_DONE:
-
-            samples_number = p_event->data.done.size;
+            samples_number = p_event->data.done.size; 
             int32_t average = 0U;
             for (int16_t i = 0; i < samples_number; i++)
             {
                 average += NRFX_SAADC_SAMPLE_GET(RESOLUTION, p_event->data.done.p_buffer, i);                            
-            }
-            float avg = average/samples_number;
-            LOG_INF("average: %f", (double) avg);
-            
-            avg_result_items[itemfillcounter] = avg;
-            itemfillcounter++;
-            if(itemfillcounter > MESSAGE_NUM-1) {
-                itemfillcounter = 0;
-                struct resp_result_s *str_resp = k_malloc(sizeof(struct resp_result_s));
-                memcpy(str_resp->resultset, avg_result_items, sizeof(avg_result_items));
-                k_queue_append(&resp_data_queue, str_resp);
-            }
+            } 
+            lastNum = average/samples_number;
+            LOG_INF("average: %f", (double) lastNum);                      
+            k_work_submit(&dataready_worker);       
 
             break;
 
@@ -167,29 +179,8 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
     }
 }
 
-void calibrate_and_start() {
+void calibrate_and_start(struct k_work *work) {
     nrfx_err_t status;
-    status = nrfx_saadc_offset_calibrate(saadc_handler); //proceeds with measuring after calibrate?
-    NRFX_ASSERT(status == NRFX_SUCCESS);
-}
-
-/**
- * @brief Function for application main entry.
-
- */
-static int configureSAADC(void)
-{
-    nrfx_err_t status;
-    (void)status;
-
-    IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE_INST_GET(GPIOTE_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_GPIOTE_INST_HANDLER_GET(GPIOTE_INST_IDX), 0, 0);
-    IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_SAADC), IRQ_PRIO_LOWEST, nrfx_saadc_irq_handler, 0, 0);
-
-    
-    LOG_INF("Starting nrfx_saadc advanced non-blocking sampling with internal timer example.");
-    
-
     status = nrfx_saadc_init(NRFX_SAADC_DEFAULT_CONFIG_IRQ_PRIORITY);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
@@ -210,15 +201,38 @@ static int configureSAADC(void)
     status = nrfx_saadc_buffer_set(m_sample_buffers[0], BUFFER_SIZE);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
-    nrfx_gpiote_t const gpiote_inst = NRFX_GPIOTE_INSTANCE(GPIOTE_INST_IDX);
-    status = nrfx_gpiote_init(&gpiote_inst, NRFX_GPIOTE_DEFAULT_CONFIG_IRQ_PRIORITY);
+    
+    status = nrfx_saadc_offset_calibrate(saadc_handler); //proceeds with measuring after calibrate?
     NRFX_ASSERT(status == NRFX_SUCCESS);
-    LOG_INF("GPIOTE status: %s", nrfx_gpiote_init_check(&gpiote_inst) ? "initialized" : "not initialized");
+}
+
+/**
+ * @brief Function for application main entry.
+
+ */
+static int configureSAADC(void)
+{    
+    
+    nrfx_err_t status;
+    (void)status;
+
+    IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE_INST_GET(GPIOTE_INST_IDX)), IRQ_PRIO_LOWEST,
+                NRFX_GPIOTE_INST_HANDLER_GET(GPIOTE_INST_IDX), 0, 0);
+    IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_SAADC), IRQ_PRIO_LOWEST, nrfx_saadc_irq_handler, 0, 0);
+
+    
+    LOG_INF("Starting nrfx_saadc advanced non-blocking sampling with internal timer example.");
+    
+
+  
+
+    // nrfx_gpiote_t const gpiote_inst = NRFX_GPIOTE_INSTANCE(GPIOTE_INST_IDX);
+    // status = nrfx_gpiote_init(&gpiote_inst, NRFX_GPIOTE_DEFAULT_CONFIG_IRQ_PRIORITY);
+    // NRFX_ASSERT(status == NRFX_SUCCESS);
+    // LOG_INF("GPIOTE status: %s", nrfx_gpiote_init_check(&gpiote_inst) ? "initialized" : "not initialized");
 
     // pin_on_event_toggle_setup(&gpiote_inst, OUT_GPIO_PIN,
-    //                           nrf_saadc_event_address_get(NRF_SAADC, NRF_SAADC_EVENT_RESULTDONE));
-
-    m_saadc_done = true;
+    //                           nrf_saadc_event_address_get(NRF_SAADC, NRF_SAADC_EVENT_RESULTDONE));    
     return 0;
 }
 
