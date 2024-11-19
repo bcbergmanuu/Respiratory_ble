@@ -1,9 +1,9 @@
 / {
-    zephyr,user {
-    /* period cell corresponds to initial period */
-        pwms = <&pwm0 0 PWM_HZ(16000000) PWM_POLARITY_NORMAL>;
-    //    signal-gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
-    };
+    // zephyr,user {
+    // /* period cell corresponds to initial period */
+    //     pwms = <&pwm0 0 PWM_HZ(16000000) PWM_POLARITY_NORMAL>;
+    // //    signal-gpios = <&gpio0 4 GPIO_ACTIVE_HIGH>;
+    // };
 };
 
 // &pinctrl {

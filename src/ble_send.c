@@ -20,7 +20,7 @@
 #include "adc_control.h"
 #include "respiratory.pb.h"
 #include "ble_send.h"
-
+#include "ppi_config.h"
 
 
 LOG_MODULE_REGISTER(BLE_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
@@ -107,12 +107,20 @@ BT_CONN_CB_DEFINE(conn_callbacks) = {
 };
 
 K_WORK_DEFINE(startcollecting, calibrate_and_start);
+K_WORK_DEFINE(start_emitting, ppi_start);
+K_WORK_DEFINE(stop_emitting, ppi_stop);
+K_WORK_DEFINE(stop_adc, adc_stop);
 
 static void resp_readmotion_data_notify_changed(const struct bt_gatt_attr *attr, uint16_t value) {
 	notify_ble_resp_on1 = (value == BT_GATT_CCC_NOTIFY) ? 1 : 0;
+	LOG_INF("resp_notify_changed");
 	if(notify_ble_resp_on1) {
 		k_work_submit(&startcollecting);
-	}	
+		k_work_submit(&start_emitting);
+	} else {		
+		k_work_submit(&stop_emitting);
+		k_work_submit(&adc_stop);
+	}
 }
 
 BT_GATT_SERVICE_DEFINE(motion_svc,

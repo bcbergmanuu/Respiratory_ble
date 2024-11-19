@@ -2,10 +2,7 @@
 #include <zephyr/sys/printk.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/device.h>
-
-#include <stdio.h>
-#include <string.h>
-#include <nrfx_pwm.h>
+#include <zephyr/logging/log.h>
 
    /* Copyright (c) 2013 Nordic Semiconductor. All Rights Reserved.
  *
@@ -15,10 +12,7 @@
 /*
  * See README.md for a description of the application. 
  */ 
- 
-#include <stdbool.h>
-
-
+LOG_MODULE_REGISTER(PPI_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
 
 /**
  * @brief Function for application main entry.
@@ -36,7 +30,7 @@ int ppi_init(void)
     
     NRF_GPIOTE->CONFIG[0] = GPIOTE_CONFIG_MODE_Task << GPIOTE_CONFIG_MODE_Pos |
                             GPIOTE_CONFIG_POLARITY_Toggle << GPIOTE_CONFIG_POLARITY_Pos |
-                            13 << GPIOTE_CONFIG_PSEL_Pos | 
+                            4 << GPIOTE_CONFIG_PSEL_Pos | 
                             GPIOTE_CONFIG_OUTINIT_Low << GPIOTE_CONFIG_OUTINIT_Pos;
                             
     NRF_TIMER1->PRESCALER = 0;
@@ -44,12 +38,23 @@ int ppi_init(void)
     // Due to PAN item 33, you can't have this at 1 for first revision chips, and will hence be limited to 4 MHz. 
     NRF_TIMER1->CC[0] = 1;
     NRF_TIMER1->SHORTS = TIMER_SHORTS_COMPARE0_CLEAR_Enabled << TIMER_SHORTS_COMPARE0_CLEAR_Pos;
-    NRF_TIMER1->TASKS_START = 1;
+    //NRF_TIMER1->TASKS_START = 1;
     
     NRF_PPI->CH[0].EEP = (uint32_t) &NRF_TIMER1->EVENTS_COMPARE[0];
     NRF_PPI->CH[0].TEP = (uint32_t) &NRF_GPIOTE->TASKS_OUT[0];
     
     NRF_PPI->CHENSET = PPI_CHENSET_CH0_Enabled << PPI_CHENSET_CH0_Pos;
+    return 0;
+}
+
+void ppi_start(struct k_work * work) {
+    NRF_TIMER1->TASKS_START = 1;
+    LOG_INF("ppi started");
+}
+
+void ppi_stop(struct k_work * work) {
+    NRF_TIMER1->TASKS_STOP = 1;
+    LOG_INF("ppi stopped");
 }
 
 SYS_INIT(ppi_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);

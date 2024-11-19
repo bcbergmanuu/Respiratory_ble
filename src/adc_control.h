@@ -59,5 +59,6 @@
 
 
 extern void calibrate_and_start(struct k_work *work);
+extern void adc_stop(struct k_work work)
 
 #endif
