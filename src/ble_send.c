@@ -25,8 +25,6 @@
 
 LOG_MODULE_REGISTER(BLE_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
 
-K_FIFO_DEFINE(resp_data_queue);
-
 uint8_t notify_ble_resp_on1 =0;
 
 //general service
@@ -40,7 +38,7 @@ static struct bt_uuid_128 respiratory_notify_prop = BT_UUID_INIT_128(
 static uint8_t respiratory_notify_buff[adcResults_size];
 
 //protobuf encode sensor data, vector_n has 10 entries.
-static int encode_data(float vector_n[], uint8_t *protobuf_packed, size_t *packed_size) {
+static int encode_data(int16_t vector_n[], uint8_t *protobuf_packed, size_t *packed_size) {
 	bool status;
 
 	adcResults message = adcResults_init_zero;
@@ -192,23 +190,17 @@ int ble_load()
 
 
 
-void ble_notify_respiratory_proc(struct resp_result_s *dataitem) {		
+void ble_notify_respiratory_proc(int16_t adcitems[]) {		
 	struct bt_gatt_attr *notify_attr = bt_gatt_find_by_uuid(motion_svc.attrs, motion_svc.attr_count, &respiratory_notify_prop.uuid);
-	
-    
-        
-        //struct resp_result_s *dataitem = k_fifo_get(&resp_data_queue, K_FOREVER);
-		
+	    
         if(notify_ble_resp_on1){
 
 			size_t packed_size;        
 
-			encode_data(dataitem->resultset, respiratory_notify_buff, &packed_size);
+			encode_data(adcitems, respiratory_notify_buff, &packed_size);
 			LOG_INF("notify:");
 			bt_gatt_notify(NULL, notify_attr, respiratory_notify_buff, packed_size);			
-		}
-		//k_free(dataitem);
-    
+		}    
 }
 
 

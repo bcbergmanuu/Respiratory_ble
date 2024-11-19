@@ -49,8 +49,8 @@ K_HEAP_DEFINE(BUFFER,512);
 /** @brief Symbol specifying GPIO pin used to test the functionality of SAADC. */
 #define OUT_GPIO_PIN LOOPBACK_PIN_1B
 
-/** @brief Acquisition time [us] for source resistance <= 10 kOhm (see SAADC electrical specification). */
-#define ACQ_TIME_10K 3UL
+/** @brief Acquisition time [us] for source resistance <= 800 kOhm (see SAADC electrical specification). */
+#define ACQ_TIME_10K 40UL
 
 /** @brief Conversion time [us] (see SAADC electrical specification). */
 #define CONV_TIME 2UL
@@ -71,7 +71,7 @@ K_HEAP_DEFINE(BUFFER,512);
 #define BUFFER_COUNT 2UL
 
 /** @brief Symbol specifying the size of singular sample buffer ( @ref m_sample_buffers ). */
-#define BUFFER_SIZE 200UL //means 40Hz
+//#define BUFFER_SIZE 5UL //means 40Hz
 
 /** @brief Symbol specifying the resolution of the SAADC. */
 #define RESOLUTION NRF_SAADC_RESOLUTION_12BIT
@@ -80,14 +80,9 @@ K_HEAP_DEFINE(BUFFER,512);
 static const nrfx_saadc_channel_t m_single_channel = SAADC_CHANNEL_SE_ACQ_3US(CH0_AIN, 0);
 
 /** @brief Samples buffer to store values from a single channel ( @ref m_single_channel). */
-#if (NRF_SAADC_8BIT_SAMPLE_WIDTH == 8) && (RESOLUTION == NRF_SAADC_RESOLUTION_8BIT)
-static uint8_t m_sample_buffers[BUFFER_COUNT][BUFFER_SIZE];
-#else
-static uint16_t m_sample_buffers[BUFFER_COUNT][BUFFER_SIZE];
-#endif
 
-/** @brief Flag indicating that sampling on every specified channel is finished and buffer ( @ref m_sample_buffers ) is filled with samples. */
-static bool m_saadc_done;
+static uint16_t m_sample_buffers[BUFFER_COUNT][MESSAGE_NUM];
+
 
 /** For continuous sampling the sample rate SAADC_SAMPLE_FREQUENCY should fulfill the following criteria (see SAADC Continuous sampling). */
 NRFX_STATIC_ASSERT(SAADC_SAMPLE_FREQUENCY <= (1000000UL / (ACQ_TIME_10K + CONV_TIME)));
@@ -101,26 +96,18 @@ NRFX_STATIC_ASSERT((INTERNAL_TIMER_CC >= 80UL ) && (INTERNAL_TIMER_CC <= 2047UL)
  * @param[in] p_event Pointer to an SAADC driver event.
  */
 
-static volatile float lastNum = 0;
 
+
+int16_t result_items[MESSAGE_NUM] = {0};
 
 void dataready_handler(struct k_work *work) {
-
-    static uint16_t itemfillcounter = 0;
-    static float avg_result_items[MESSAGE_NUM] = {0};        
-    avg_result_items[itemfillcounter] = lastNum;
-    itemfillcounter++;
-    if(itemfillcounter > MESSAGE_NUM-1) {
-        itemfillcounter = 0;
-        struct resp_result_s str_resp;
-        
-        memcpy(str_resp.resultset, avg_result_items, sizeof(avg_result_items));            
-        ble_notify_respiratory_proc(&str_resp);
-    }
+    
+    LOG_INF("dataready_handler");
+    
+    ble_notify_respiratory_proc(result_items);    
 }
 
 K_WORK_DEFINE(dataready_worker, dataready_handler);
-
 
 static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 {
@@ -146,12 +133,12 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
             break;
 
         case NRFX_SAADC_EVT_BUF_REQ:
-            //LOG_INF("SAADC event: BUF_REQ");
+            LOG_INF("SAADC event: BUF_REQ");
 
             if (notify_ble_resp_on1)
             {
                 /* Next available buffer must be set on the NRFX_SAADC_EVT_BUF_REQ event to achieve the continuous conversion. */
-                status = nrfx_saadc_buffer_set(m_sample_buffers[buffer_index++], BUFFER_SIZE);
+                status = nrfx_saadc_buffer_set(m_sample_buffers[buffer_index++], MESSAGE_NUM);
                 NRFX_ASSERT(status == NRFX_SUCCESS);
                 buffer_index = buffer_index % BUFFER_COUNT;
             }
@@ -159,13 +146,13 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 
         case NRFX_SAADC_EVT_DONE:
             samples_number = p_event->data.done.size; 
-            int32_t average = 0U;
+            
             for (int16_t i = 0; i < samples_number; i++)
-            {
-                average += NRFX_SAADC_SAMPLE_GET(RESOLUTION, p_event->data.done.p_buffer, i);                            
+            {                
+                result_items[i] = NRFX_SAADC_SAMPLE_GET(RESOLUTION, p_event->data.done.p_buffer, i);
             } 
-            lastNum = average/samples_number;
-            LOG_INF("average: %f", (double) lastNum);                      
+            LOG_INF("first item:%d", result_items[0]);
+                    
             k_work_submit(&dataready_worker);       
 
             break;
@@ -179,6 +166,14 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
     }
 }
 
+#define NRFX_SAADC_BB_CONFIG                                           \
+{                                                                               \
+    .oversampling      = NRF_SAADC_OVERSAMPLE_256X,                         \
+    .burst             = NRF_SAADC_BURST_DISABLED,                              \
+    .internal_timer_cc = 0,                                                     \
+    .start_on_end      = false,                                                 \
+}
+
 void calibrate_and_start(struct k_work *work) {
     nrfx_err_t status;
     status = nrfx_saadc_init(NRFX_SAADC_DEFAULT_CONFIG_IRQ_PRIORITY);
@@ -187,7 +182,7 @@ void calibrate_and_start(struct k_work *work) {
     status = nrfx_saadc_channel_config(&m_single_channel);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
-    nrfx_saadc_adv_config_t adv_config = NRFX_SAADC_DEFAULT_ADV_CONFIG;
+    nrfx_saadc_adv_config_t adv_config = NRFX_SAADC_BB_CONFIG;
     adv_config.internal_timer_cc = INTERNAL_TIMER_CC;
     adv_config.start_on_end = true;
 
@@ -198,11 +193,11 @@ void calibrate_and_start(struct k_work *work) {
                                           saadc_handler);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
-    status = nrfx_saadc_buffer_set(m_sample_buffers[0], BUFFER_SIZE);
+    status = nrfx_saadc_buffer_set(m_sample_buffers[0], MESSAGE_NUM);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 
     
-    status = nrfx_saadc_offset_calibrate(saadc_handler); //proceeds with measuring after calibrate?
+    status = nrfx_saadc_offset_calibrate(saadc_handler);
     NRFX_ASSERT(status == NRFX_SUCCESS);
 }
 
@@ -211,17 +206,13 @@ void calibrate_and_start(struct k_work *work) {
 
  */
 static int configureSAADC(void)
-{    
-    
-    nrfx_err_t status;
-    (void)status;
-
-    IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE_INST_GET(GPIOTE_INST_IDX)), IRQ_PRIO_LOWEST,
-                NRFX_GPIOTE_INST_HANDLER_GET(GPIOTE_INST_IDX), 0, 0);
+{          
+    // IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_GPIOTE_INST_GET(GPIOTE_INST_IDX)), IRQ_PRIO_LOWEST,
+    //             NRFX_GPIOTE_INST_HANDLER_GET(GPIOTE_INST_IDX), 0, 0);
     IRQ_CONNECT(NRFX_IRQ_NUMBER_GET(NRF_SAADC), IRQ_PRIO_LOWEST, nrfx_saadc_irq_handler, 0, 0);
 
     
-    LOG_INF("Starting nrfx_saadc advanced non-blocking sampling with internal timer example.");
+    LOG_INF("Starting nrfx_saadc");
     
 
   

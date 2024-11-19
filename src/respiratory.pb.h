@@ -11,7 +11,7 @@
 
 /* Struct definitions */
 typedef struct _adcResults {
-    float resp[10];
+    int32_t resp[5];
 } adcResults;
 
 
@@ -20,15 +20,15 @@ extern "C" {
 #endif
 
 /* Initializer values for message structs */
-#define adcResults_init_default                  {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
-#define adcResults_init_zero                     {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}
+#define adcResults_init_default                  {{0, 0, 0, 0, 0}}
+#define adcResults_init_zero                     {{0, 0, 0, 0, 0}}
 
 /* Field tags (for use in manual encoding/decoding) */
 #define adcResults_resp_tag                      1
 
 /* Struct field encoding specification for nanopb */
 #define adcResults_FIELDLIST(X, a) \
-X(a, STATIC,   FIXARRAY, FLOAT,    resp,              1)
+X(a, STATIC,   FIXARRAY, INT32,    resp,              1)
 #define adcResults_CALLBACK NULL
 #define adcResults_DEFAULT NULL
 
@@ -39,7 +39,7 @@ extern const pb_msgdesc_t adcResults_msg;
 
 /* Maximum encoded size of messages (where known) */
 #define RESPIRATORY_PB_H_MAX_SIZE                adcResults_size
-#define adcResults_size                          50
+#define adcResults_size                          55
 
 #ifdef __cplusplus
 } /* extern "C" */
