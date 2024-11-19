@@ -1,7 +1,7 @@
 #ifndef ADC_CONTROL__
 #define ADC_CONTROL__
 
-
+#include <zephyr/kernel.h>
 
 #define LOOPBACK_PIN_1A 3
 #define LOOPBACK_PIN_1B 31
@@ -46,9 +46,9 @@
     {                                                   \
         .resistor_p = NRF_SAADC_RESISTOR_DISABLED,      \
         .resistor_n = NRF_SAADC_RESISTOR_DISABLED,      \
-        .gain       = NRF_SAADC_GAIN1_6,                \
+        .gain       = NRF_SAADC_GAIN1_2,                \
         .reference  = NRF_SAADC_REFERENCE_INTERNAL,     \
-        .acq_time   = NRF_SAADC_ACQTIME_3US,            \
+        .acq_time   = NRF_SAADC_ACQTIME_40US,            \
         .mode       = NRF_SAADC_MODE_SINGLE_ENDED,      \
         .burst      = NRF_SAADC_BURST_DISABLED,         \
     },                                                  \
@@ -59,6 +59,6 @@
 
 
 extern void calibrate_and_start(struct k_work *work);
-extern void adc_stop(struct k_work work)
+extern void adc_stop(struct k_work *work);
 
 #endif

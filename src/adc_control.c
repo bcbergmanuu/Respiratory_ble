@@ -107,6 +107,12 @@ void dataready_handler(struct k_work *work) {
     ble_notify_respiratory_proc(result_items);    
 }
 
+bool continuereading = false;
+
+void adc_stop(struct k_work *work) {
+    continuereading = false;
+}
+
 K_WORK_DEFINE(dataready_worker, dataready_handler);
 
 static void saadc_handler(nrfx_saadc_evt_t const * p_event)
@@ -135,7 +141,7 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
         case NRFX_SAADC_EVT_BUF_REQ:
             LOG_INF("SAADC event: BUF_REQ");
 
-            if (notify_ble_resp_on1)
+            if (continuereading)
             {
                 /* Next available buffer must be set on the NRFX_SAADC_EVT_BUF_REQ event to achieve the continuous conversion. */
                 status = nrfx_saadc_buffer_set(m_sample_buffers[buffer_index++], MESSAGE_NUM);
@@ -175,6 +181,7 @@ static void saadc_handler(nrfx_saadc_evt_t const * p_event)
 }
 
 void calibrate_and_start(struct k_work *work) {
+    continuereading = true;
     nrfx_err_t status;
     status = nrfx_saadc_init(NRFX_SAADC_DEFAULT_CONFIG_IRQ_PRIORITY);
     NRFX_ASSERT(status == NRFX_SUCCESS);

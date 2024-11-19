@@ -20,7 +20,7 @@
 #include "adc_control.h"
 #include "respiratory.pb.h"
 #include "ble_send.h"
-#include "ppi_config.h"
+#include "ppi_config.h" 
 
 
 LOG_MODULE_REGISTER(BLE_MODULE, CONFIG_LOG_DEFAULT_LEVEL);
@@ -119,7 +119,7 @@ static void resp_readmotion_data_notify_changed(const struct bt_gatt_attr *attr,
 		k_work_submit(&start_emitting);
 	} else {		
 		k_work_submit(&stop_emitting);
-		k_work_submit(&adc_stop);
+		k_work_submit(&stop_adc);
 	}
 }
 
